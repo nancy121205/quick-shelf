@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SourceType {
+  SHOPIFY
+  WOOCOMMERCE
+}
+
+enum SyncStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+model Product {
+  id          String     @id @default(cuid())
+  sourceType  SourceType
+  sourceId    String
+  sourceUrl   String?
+  name        String
+  sku         String?
+  description String?
+  price       Decimal?   @db.Decimal(12, 2)
+  stock       Int?
+  status      Boolean    @default(true)
+
+  images   Json?
+  variants Json?
+  metadata Json?
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([sourceType, sourceId])
+  @@index([categoryId])
+  @@index([sourceType])
+  @@index([name])
+  @@index([sku])
+}
+
+model Category {
+  id        String  @id @default(cuid())
+  name      String
+  slug      String  @unique
+  visible   Boolean @default(true)
+  sortOrder Int     @default(0)
+  parentId  String?
+
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+  @@index([sortOrder])
+}
+
+model SyncLog {
+  id         String     @id @default(cuid())
+  sourceType SourceType
+  startedAt  DateTime   @default(now())
+  finishedAt DateTime?
+  status     SyncStatus @default(RUNNING)
+
+  productsCreated Int @default(0)
+  productsUpdated Int @default(0)
+  productsFailed  Int @default(0)
+
+  errors Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([sourceType])
+  @@index([startedAt])
+  @@index([status])
+}
+
+model AdminConfig {
+  id             String  @id @default(cuid())
+  whatsappNumber String?
+  activeDesign   String  @default("design1")
+  siteSettings   Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
