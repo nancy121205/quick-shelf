@@ -1,0 +1,18 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+
+type Sync = { id: string; sourceType: string; status: string; startedAt: string; finishedAt: string | null; productsCreated: number; productsUpdated: number; productsFailed: number; errors: unknown };
+
+export default function AdminSyncPage() {
+  const [syncs, setSyncs] = useState<Sync[]>([]);
+  const [running, setRunning] = useState("");
+  const [message, setMessage] = useState("");
+  const load = useCallback(async () => { const response = await fetch("/api/admin/sync"); const payload = await response.json() as { data?: Sync[] }; setSyncs(payload.data ?? []); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+  async function run(source: string) { setRunning(source); setMessage(""); const response = await fetch("/api/admin/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source }) }); const payload = await response.json() as { success?: boolean; data?: { fetched: number; created: number; updated: number; failed: number }; error?: string }; setMessage(response.ok && payload.data ? `Fetched ${payload.data.fetched}; created ${payload.data.created}; updated ${payload.data.updated}; failed ${payload.data.failed}.` : payload.error ?? "Sync failed."); setRunning(""); await load(); }
+  return <div><p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-700">Sources</p><h1 className="mt-2 text-3xl font-semibold">Import and sync</h1><p className="mt-2 text-sm text-slate-500">Imports run on the server and write to the local catalog.</p><div className="mt-8 flex flex-wrap gap-3"><button disabled={Boolean(running)} onClick={() => void run("SHOPIFY")} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{running === "SHOPIFY" ? "Syncing Shopify..." : "Sync Shopify"}</button><button disabled={Boolean(running)} onClick={() => void run("WOOCOMMERCE")} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{running === "WOOCOMMERCE" ? "Syncing WooCommerce..." : "Sync WooCommerce"}</button></div>{message ? <p className="mt-4 rounded-lg bg-white p-3 text-sm text-slate-700">{message}</p> : null}<section className="mt-8 overflow-x-auto rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Sync history</h2><table className="mt-4 w-full min-w-[760px] text-left text-sm"><thead className="border-b border-slate-200 text-slate-500"><tr><th className="pb-3">Source</th><th className="pb-3">Status</th><th className="pb-3">Started</th><th className="pb-3">Created</th><th className="pb-3">Updated</th><th className="pb-3">Failed</th><th className="pb-3">Errors</th></tr></thead><tbody>{syncs.map((sync) => <tr key={sync.id} className="border-b border-slate-100"><td className="py-3">{sync.sourceType}</td><td className="py-3">{sync.status}</td><td className="py-3 text-slate-500">{new Date(sync.startedAt).toLocaleString()}</td><td className="py-3">{sync.productsCreated}</td><td className="py-3">{sync.productsUpdated}</td><td className="py-3">{sync.productsFailed}</td><td className="max-w-xs truncate py-3 text-slate-500">{Array.isArray(sync.errors) ? sync.errors.length : 0}</td></tr>)}{syncs.length === 0 ? <tr><td colSpan={7} className="py-8 text-slate-500">No syncs have run.</td></tr> : null}</tbody></table></section></div>;
+}
