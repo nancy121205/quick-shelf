@@ -8,8 +8,11 @@
     "start": "next start",
     "lint": "eslint",
     "db:seed": "tsx scripts/seed.ts",
+    "db:seed:shopify": "tsx scripts/seed-shopify.ts",
+    "db:seed:woocommerce": "tsx scripts/seed-woocommerce.ts",
     "db:import:shopify": "tsx scripts/import-shopify.ts",
     "db:import:woocommerce": "tsx scripts/import-woocommerce.ts",
+    "integrations:check": "tsx scripts/check-integrations.ts",
     "test": "tsx --test tests/**/*.test.ts"
   },
   "dependencies": {

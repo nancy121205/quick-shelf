@@ -7,22 +7,24 @@ This project keeps external platform access separate from the customer-facing ca
 ### Required environment variables
 
 - `SHOPIFY_STORE_DOMAIN` — for example `your-store.myshopify.com`
-- `SHOPIFY_ACCESS_TOKEN` — Shopify Admin API access token
+- `SHOPIFY_CLIENT_ID` — Shopify Dev Dashboard client ID
+- `SHOPIFY_CLIENT_SECRET` — Shopify Dev Dashboard client secret
 - `SHOPIFY_API_VERSION` — default is `2025-01`
 
 ### Shopify setup
 
 1. Create or open a Shopify store admin.
-2. Create a custom app or use a private app with Admin API access.
-3. Grant the app the required permissions to read products and product metadata.
-4. Copy the admin access token into `SHOPIFY_ACCESS_TOKEN`.
+2. Create the app in the Shopify Dev Dashboard and configure the Admin API product read scopes.
+3. Install the app on the target shop. Client-credentials authentication will fail until installation is complete.
+4. Copy the app client ID and client secret into `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET`.
 5. Set `SHOPIFY_STORE_DOMAIN` to the store hostname without `https://`.
 
 ### Commands
 
 ```bash
 SHOPIFY_STORE_DOMAIN=your-store.myshopify.com \
-SHOPIFY_ACCESS_TOKEN=your_token \
+SHOPIFY_CLIENT_ID=your_client_id \
+SHOPIFY_CLIENT_SECRET=your_client_secret \
 SHOPIFY_API_VERSION=2025-01 \
 npm run db:import:shopify
 ```
@@ -30,7 +32,15 @@ npm run db:import:shopify
 ### Dry run
 
 ```bash
-DRY_RUN=true SHOPIFY_STORE_DOMAIN=your-store.myshopify.com SHOPIFY_ACCESS_TOKEN=your_token npm run db:import:shopify
+DRY_RUN=true SHOPIFY_STORE_DOMAIN=your-store.myshopify.com SHOPIFY_CLIENT_ID=your_client_id SHOPIFY_CLIENT_SECRET=your_client_secret npm run db:import:shopify
+```
+
+### Shopify demo seeder
+
+The seeder creates 60 deterministic products with SKUs `QS-SHOP-001` through `QS-SHOP-060`. It checks for `write_products` before creating anything, skips existing seeded SKUs, and can be run repeatedly.
+
+```bash
+npm run db:seed:shopify
 ```
 
 ## WooCommerce
@@ -45,8 +55,10 @@ DRY_RUN=true SHOPIFY_STORE_DOMAIN=your-store.myshopify.com SHOPIFY_ACCESS_TOKEN=
 
 1. Log in to WordPress admin.
 2. Open the WooCommerce settings and generate REST API keys.
-3. Give the key read access to products and product metadata.
+3. Give the key `Read` permission and confirm the user can list products.
 4. Copy the consumer key and secret into the environment variables.
+
+For WordPress Studio, verify the local site is running and that `/wp-json/wc/v3/products` is reachable. The client tries Basic Auth first and uses the WooCommerce query-parameter fallback when local server configuration does not forward the Authorization header.
 
 ### Commands
 
@@ -63,6 +75,14 @@ npm run db:import:woocommerce
 DRY_RUN=true WOOCOMMERCE_STORE_URL=https://example.com WOOCOMMERCE_CONSUMER_KEY=key WOOCOMMERCE_CONSUMER_SECRET=secret npm run db:import:woocommerce
 ```
 
+### WooCommerce demo seeder
+
+The seeder creates or reuses eight categories and creates 60 deterministic products with SKUs `QS-WOO-001` through `QS-WOO-060`. Existing seeded SKUs are skipped, so rerunning it does not create duplicates.
+
+```bash
+npm run db:seed:woocommerce
+```
+
 ## Synchronization behavior
 
 - Each import creates a `SyncLog` entry.
@@ -75,7 +95,8 @@ DRY_RUN=true WOOCOMMERCE_STORE_URL=https://example.com WOOCOMMERCE_CONSUMER_KEY=
 ## Troubleshooting
 
 - Missing credentials: check the environment variables and `.env` file.
-- Authentication errors: confirm the token or WooCommerce key pair is correct.
+- Shopify installation errors: install the Dev Dashboard app on the configured shop and confirm product read scopes.
+- WooCommerce authentication errors: regenerate the REST key with `Read` permission and confirm its user can list products.
 - Rate limits: wait and retry; the importer does not retry endlessly.
 - Empty product payloads: check pagination and API permissions.
 
