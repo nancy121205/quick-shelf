@@ -11,7 +11,7 @@ export async function PATCH(request: NextRequest, context: Context) {
 
   try {
     const { id } = await context.params;
-    const body = (await request.json()) as { name?: unknown; sku?: unknown; description?: unknown; price?: unknown; stock?: unknown; status?: unknown; categoryId?: unknown };
+    const body = (await request.json()) as { name?: unknown; sku?: unknown; description?: unknown; price?: unknown; stock?: unknown; status?: unknown; categoryId?: unknown; images?: unknown };
     const data: Prisma.ProductUpdateInput = {};
     if (typeof body.name === "string") data.name = body.name.trim();
     if (typeof body.sku === "string" || body.sku === null) data.sku = body.sku;
@@ -21,6 +21,7 @@ export async function PATCH(request: NextRequest, context: Context) {
     if (typeof body.status === "boolean") data.status = body.status;
     if (typeof body.categoryId === "string") data.category = { connect: { id: body.categoryId } };
     if (body.categoryId === null) data.category = { disconnect: true };
+    if (Array.isArray(body.images) && body.images.every((image) => typeof image === "string")) data.images = body.images;
     const product = await prisma.product.update({ where: { id }, data, select: { id: true, name: true, sku: true, description: true, price: true, stock: true, status: true, categoryId: true } });
     return NextResponse.json({ success: true, data: product });
   } catch (error) {

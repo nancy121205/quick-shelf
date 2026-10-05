@@ -4,10 +4,9 @@ import { fetchAllShopifyProducts, getShopifyConfig, shopifyRequest } from "../li
 
 type UserError = { field?: string[] | null; message: string };
 type ScopeResponse = { appInstallation: { accessScopes: Array<{ handle: string }> } };
-type LocationResponse = { locations: { nodes: Array<{ id: string }> } };
-type CreateProductResponse = { productCreate: { product?: { id: string } | null; userErrors: UserError[] } };
-type CreateVariantResponse = { productVariantsBulkCreate: { productVariants?: Array<{ id: string; inventoryItem?: { id: string } | null }>; userErrors: UserError[] } };
-type InventoryResponse = { inventorySetQuantities: { userErrors: UserError[] } };
+type ExistingProduct = { id: string; title: string; variants?: { nodes?: Array<{ id: string; sku?: string | null }> | null } | null };
+type CreateProductResponse = { productCreate: { product?: { id: string; variants?: { nodes?: Array<{ id: string }> | null } | null } | null; userErrors: UserError[] } };
+type UpdateVariantResponse = { productVariantsBulkUpdate: { productVariants?: Array<{ id: string }>; userErrors: UserError[] } };
 
 const productCount = 60;
 
@@ -42,11 +41,25 @@ async function verifyWriteScope() {
   }
 }
 
-async function createProduct(product: ReturnType<typeof demoProduct>, locationId: string | null) {
+async function updateDefaultVariant(productId: string, variantId: string, product: ReturnType<typeof demoProduct>) {
+  const updateResponse = await shopifyRequest<UpdateVariantResponse>(
+    `mutation SeedVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+      productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+        productVariants { id }
+        userErrors { field message }
+      }
+    }`,
+    { productId, variants: [{ id: variantId, price: product.price, inventoryItem: { sku: product.sku } }] }
+  );
+  const updateErrors = updateResponse.productVariantsBulkUpdate.userErrors ?? [];
+  if (updateErrors.length > 0) throw new Error(formatErrors(updateErrors));
+}
+
+async function createProduct(product: ReturnType<typeof demoProduct>) {
   const createResponse = await shopifyRequest<CreateProductResponse>(
     `mutation SeedProduct($product: ProductCreateInput!, $media: [CreateMediaInput!]) {
       productCreate(product: $product, media: $media) {
-        product { id }
+        product { id variants(first: 1) { nodes { id } } }
         userErrors { field message }
       }
     }`,
@@ -69,32 +82,9 @@ async function createProduct(product: ReturnType<typeof demoProduct>, locationId
   }
 
   const productId = createResponse.productCreate.product.id;
-  const variantResponse = await shopifyRequest<CreateVariantResponse>(
-    `mutation SeedVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-      productVariantsBulkCreate(productId: $productId, variants: $variants) {
-        productVariants { id inventoryItem { id } }
-        userErrors { field message }
-      }
-    }`,
-    {
-      productId,
-      variants: [{ price: product.price, sku: product.sku, ...(locationId ? { inventoryQuantities: [{ availableQuantity: product.inventory, locationId }] } : {}) }],
-    }
-  );
-
-  const variantErrors = variantResponse.productVariantsBulkCreate.userErrors ?? [];
-  if (variantErrors.length > 0) throw new Error(formatErrors(variantErrors));
-
-  const inventoryItemId = variantResponse.productVariantsBulkCreate.productVariants?.[0]?.inventoryItem?.id;
-  if (locationId && inventoryItemId && !variantResponse.productVariantsBulkCreate.productVariants?.[0]) {
-    const inventoryResponse = await shopifyRequest<InventoryResponse>(
-      `mutation SeedInventory($input: InventorySetQuantitiesInput!) {
-        inventorySetQuantities(input: $input) { userErrors { field message } }
-      }`,
-      { input: { name: "available", reason: "correction", quantities: [{ inventoryItemId, locationId, quantity: product.inventory }] } }
-    );
-    if (inventoryResponse.inventorySetQuantities.userErrors.length > 0) throw new Error(formatErrors(inventoryResponse.inventorySetQuantities.userErrors));
-  }
+  const variantId = createResponse.productCreate.product.variants?.nodes?.[0]?.id;
+  if (!variantId) throw new Error("Shopify did not return the created default variant.");
+  await updateDefaultVariant(productId, variantId, product);
 }
 
 async function main() {
@@ -102,10 +92,9 @@ async function main() {
   console.log(`Shopify seed target: ${config.storeDomain}`);
   await verifyWriteScope();
 
-  const existingProducts = await fetchAllShopifyProducts();
+  const existingProducts = await fetchAllShopifyProducts() as ExistingProduct[];
   const existingSkus = new Set(existingProducts.flatMap((product) => product.variants?.nodes?.map((variant) => variant.sku).filter((sku): sku is string => Boolean(sku)) ?? []));
-  const locationResponse = await shopifyRequest<LocationResponse>("query SeedLocation { locations(first: 1) { nodes { id } } }");
-  const locationId = locationResponse.locations.nodes[0]?.id ?? null;
+  const existingByTitle = new Map(existingProducts.map((product) => [product.title, product]));
 
   let existing = 0;
   let created = 0;
@@ -121,7 +110,15 @@ async function main() {
     }
 
     try {
-      await createProduct(product, locationId);
+      const partialProduct = existingByTitle.get(product.title);
+      const existingVariantId = partialProduct?.variants?.nodes?.[0]?.id;
+      if (partialProduct && existingVariantId) {
+        await updateDefaultVariant(partialProduct.id, existingVariantId, product);
+        existing += 1;
+        skipped += 1;
+        continue;
+      }
+      await createProduct(product);
       created += 1;
     } catch (error) {
       failed += 1;
