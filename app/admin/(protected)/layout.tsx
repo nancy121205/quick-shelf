@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { isAdminAuthenticated } from "../../../lib/admin-auth";
 import { AdminSignOut } from "./sign-out";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   if (!(await isAdminAuthenticated())) {
     redirect("/admin/login");

@@ -1,19 +1,23 @@
 import { NextResponse } from "next/server";
-import { isAdminPasswordConfigured, setAdminSessionCookie, verifyAdminPassword } from "../../../../../lib/admin-auth";
+import { getAdminConfig, setAdminSessionCookie, verifyAdminCredentials } from "../../../../../lib/admin-auth";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
-    if (!isAdminPasswordConfigured()) {
+    const adminConfig = getAdminConfig();
+    if (!adminConfig.config) {
       return NextResponse.json(
-        { success: false, error: "Admin authentication is not configured" },
+        { success: false, error: `Admin authentication is not configured. Missing: ${adminConfig.missing.join(", ")}` },
         { status: 503 }
       );
     }
 
-    const body = (await request.json()) as { password?: unknown };
+    const body = (await request.json()) as { email?: unknown; password?: unknown };
+    const email = typeof body.email === "string" ? body.email : "";
     const password = typeof body.password === "string" ? body.password : "";
 
-    if (!verifyAdminPassword(password)) {
+    if (!verifyAdminCredentials(email, password)) {
       return NextResponse.json(
         { success: false, error: "Invalid admin password" },
         { status: 401 }
