@@ -1,5 +1,5 @@
-import { CatalogApp } from "./catalog";
+import { LandingPage } from "./landing";
 
 export default function Home() {
-  return <CatalogApp />;
+  return <LandingPage />;
 }
